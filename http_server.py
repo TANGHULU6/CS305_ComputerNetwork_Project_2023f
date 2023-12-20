@@ -28,7 +28,9 @@ class HttpServer:
             while keep_alive:
                 request = client_socket.recv(1024).decode('utf-8')
                 if not request:
-                    break
+                    continue
                 response, keep_alive = handle_request(request)
+                print(f'send {response}')
                 client_socket.sendall(response.encode('utf-8'))
+
 
