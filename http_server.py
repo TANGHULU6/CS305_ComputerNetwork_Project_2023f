@@ -30,7 +30,8 @@ class HttpServer:
                 if not request:
                     continue
                 response, keep_alive = handle_request(request)
-                print(f'send {response}')
-                client_socket.sendall(response.encode('utf-8'))
+                print(f'|SEND| \n {response}')
+                client_socket.sendall(response)
+            client_socket.close()
 
 
