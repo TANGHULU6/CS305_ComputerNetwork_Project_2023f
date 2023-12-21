@@ -26,12 +26,39 @@ class HttpServer:
             print(f"Connected by {addr}")
             keep_alive = True
             while keep_alive:
-                request = client_socket.recv(1024).decode('utf-8')
+                request = bytes()
+                content_length = None
+                header_end = None
+                while True:
+                    # 接收数据
+                    chunk = client_socket.recv(1024)
+                    if not chunk:
+                        # 如果没有数据，跳出循环
+                        break
+                    request += chunk
+
+
+                    # 检查是否收到完整的HTTP头部
+                    if b'\r\n\r\n' in request and content_length is None:
+                        header_end = request.find(b'\r\n\r\n') + 4  # 加4是为了包含分界标记本身
+                        headers, _ = request.split(b'\r\n\r\n', 1)
+                        for line in headers.split(b'\r\n'):
+                            if line.lower().startswith(b'content-length:'):
+                                content_length = int(line.split(b':')[1].strip())
+
+                    content = request[header_end:]
+                    # 检查是否已经接收到了所有预期的数据
+                    if content_length is not None and len(content) >= content_length:
+                        break
+
+                    if content_length is None:
+                        break
+
                 if not request:
                     continue
                 response, keep_alive = handle_request(request)
                 print(f'|SEND| \n {response}')
                 client_socket.sendall(response)
-            client_socket.close()
+            # client_socket.close()
 
 
