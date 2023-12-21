@@ -11,7 +11,7 @@ SESSIONS = {}
 SESSION_TIMEOUT = 300
 
 
-def handle_request(request):
+def handle_request(request, client_socket):
 
     header_end = request.find(b'\r\n\r\n') + 4  # 加4是为了包含分界标记本身
 
@@ -24,6 +24,8 @@ def handle_request(request):
     headers = parse_headers(header_text)
 
     keep_alive = True
+
+    chunked = False
 
     if "Connection" in headers.keys():
         keep_alive = headers.get("Connection").lower() != "close"
@@ -38,8 +40,6 @@ def handle_request(request):
     response_header = str()
     response_body = bytes()
 
-
-
     # 检查授权
     if not is_authed:
         response_header, response_body = generate_401_response(keep_alive)
@@ -48,16 +48,21 @@ def handle_request(request):
         response_header, response_body = generate_head_200_response(keep_alive)
     elif method == "POST" and path == '/':
         response_header, response_body = generate_200_response(keep_alive, "Post This")
-    elif method == 'GET' and not path.startswith('/upload?'):
+    elif method == 'GET' and not path.startswith('/upload?') and not path.startswith('/delete?'):
 
         url_components = urllib.parse.urlparse(path)
         file_path = os.path.join('./data', url_components.path[1:])
         query_params = urllib.parse.parse_qs(url_components.query)
 
+        chunk = query_params.get("chunked")
+
+        if chunk and int(chunk[0]) == 1:
+            chunked = True
+
         if os.path.isdir(file_path):
             response_header, response_body =  handle_directory_request(file_path, query_params, keep_alive, currentUser)
         elif os.path.isfile(file_path):
-            response_header, response_body =  generate_file_download_response(file_path, keep_alive)
+            response_header, response_body =  generate_file_download_response(file_path, keep_alive, query_params, client_socket)
         else:
             response_header, response_body =  generate_404_response(keep_alive)
 
@@ -84,6 +89,7 @@ def handle_request(request):
 
             else:
                 response_header, response_body = handle_post_request(request, headers, './data/' + path, keep_alive, currentUser)
+
     elif method == 'POST' and path.startswith('/delete?'):
 
         parsed_url = urllib.parse.urlparse(path)
@@ -105,7 +111,9 @@ def handle_request(request):
     else:
         response_header, response_body = generate_405_response(keep_alive), keep_alive
 
-    if not is_authed:
+    if chunked:
+        return None, None
+    elif not is_authed:
         if method == "HEAD":
             return (response_header + f"\r\nSet-Cookie: session-id={session_id}; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; HttpOnly;" + '\r\n\r\n').encode('utf-8'), keep_alive
         else:
@@ -136,13 +144,33 @@ def is_session_valid(session_id):
             del SESSIONS[session_id]
     return False
 
+
+def handle_chunked_transfer(file_path, client_socket):
+    response_headers = [
+        "HTTP/1.1 200 OK",
+        "Transfer-Encoding: chunked",
+        "Content-Type: text/plain",  # or appropriate content type
+        # any other necessary headers
+    ]
+    response_header = "\r\n".join(response_headers) + "\r\n\r\n"
+
+    with open(file_path, 'rb') as file:
+        chunk = file.read(1024)  # Read in chunks of 1024 bytes
+        while chunk:
+            yield f"{len(chunk):X}\r\n".encode('utf-8')  # Chunk size in hex
+            yield chunk
+            yield b"\r\n"
+            chunk = file.read(1024)
+
+    yield b"0\r\n\r\n"  # End of chunks
+
+
 def handle_user_auth(headers):
     cookies = headers.get('Cookie', '')
     session_id = None
     if cookies and 'session-id=' in cookies:
         session_id = cookies.split('session-id=')[1].split(';')[0]
         if session_id and is_session_valid(session_id):
-            # User is authenticated via session
             is_authed = True
             current_user = get_user_from_session(session_id)
             return is_authed, current_user, None
@@ -332,24 +360,50 @@ def generate_200_cookie_response(keep_alive, session_id=None):
     return "\r\n".join(headers), content.encode('utf-8')
 
 
-def generate_file_download_response(path, keep_alive):
+def generate_file_download_response(path, keep_alive, query_params, client_socket):
     # file_path = os.path.join('./data/', urllib.parse.unquote(path[1:]))
     # print(path)
     # print(file_path)
     if not os.path.exists(path):
         return generate_400_response(keep_alive)
 
-    with open(path, 'rb') as file:
-        response_body = file.read()
-    mime_type, _ = mimetypes.guess_type(path)
-    response_headers = [
-        "HTTP/1.1 200 OK",
-        "Content-Type: " + (mime_type or "application/octet-stream"),
-        "Content-Length: " + str(len(response_body))
-    ]
-    if keep_alive:
-        response_headers.append("Connection: keep-alive")
-    return "\r\n".join(response_headers), response_body
+    chunk = query_params.get("chunked")
+
+    if not (chunk and int(chunk[0]) == 1):
+        with open(path, 'rb') as file:
+            response_body = file.read()
+        mime_type, _ = mimetypes.guess_type(path)
+        response_headers = [
+            "HTTP/1.1 200 OK",
+            "Content-Type: " + (mime_type or "application/octet-stream"),
+            "Content-Length: " + str(len(response_body))
+        ]
+        if keep_alive:
+            response_headers.append("Connection: keep-alive")
+        return "\r\n".join(response_headers), response_body
+    else:
+
+        mime_type, _ = mimetypes.guess_type(path)
+        response_headers = [
+            "HTTP/1.1 200 OK",
+            "Transfer-Encoding: chunked",
+            # "Content-Type: " + (mime_type or "application/octet-stream"),
+            # "Content-Type: text/plain",  # or appropriate content type
+            # any other necessary headers
+        ]
+        if keep_alive:
+            response_headers.append("Connection: keep-alive")
+
+        client_socket.sendall(("\r\n".join(response_headers) + '\r\n\r\n').encode('utf-8'))
+
+        with open(path, 'rb') as file:
+            chunk = file.read(1024)  # Read in chunks of 1024 bytes
+            while chunk:
+                client_socket.sendall(f"{len(chunk):X}\r\n".encode() + chunk + b"\r\n") # Chunk size in hex
+                chunk = file.read(1024)
+
+        client_socket.sendall(b"0\r\n\r\n")  # End of chunks
+        return None, None
 
 
 def generate_401_response(keep_alive):
