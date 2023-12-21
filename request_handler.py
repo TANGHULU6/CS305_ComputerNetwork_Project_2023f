@@ -46,8 +46,8 @@ def handle_request(request, client_socket):
 
     elif method == "HEAD" and path == '/':
         response_header, response_body = generate_head_200_response(keep_alive)
-    elif method == "POST" and path == '/':
-        response_header, response_body = generate_200_response(keep_alive, "Post This")
+    # elif method == "POST" and path == '/':
+    #     response_header, response_body = generate_200_response(keep_alive, "Post This")
     elif method == 'GET' and not path.startswith('/upload?') and not path.startswith('/delete?'):
 
         url_components = urllib.parse.urlparse(path)
@@ -66,8 +66,8 @@ def handle_request(request, client_socket):
         else:
             response_header, response_body =  generate_404_response(keep_alive)
 
-    elif method == 'POST' and not path.startswith('/upload?') and not path.startswith('/delete?'):
-        response_header, response_body =  generate_400_response(keep_alive)
+    # elif method == 'POST' and not path.startswith('/upload?') and not path.startswith('/delete?'):
+    #     response_header, response_body =  generate_400_response(keep_alive)
 
     elif method != 'POST' and path.startswith('/upload?'):
         response_header, response_body =  generate_405_response(keep_alive)
@@ -109,10 +109,10 @@ def handle_request(request, client_socket):
             else:
                 response_header, response_body = handle_delete_request(real_path, keep_alive)
     else:
-        response_header, response_body = generate_405_response(keep_alive), keep_alive
+        response_header, response_body = generate_405_response(keep_alive)
 
     if chunked:
-        return None, None
+        return None, None, keep_alive
     elif not is_authed:
         if method == "HEAD":
             return (response_header + f"\r\nSet-Cookie: session-id={session_id}; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; HttpOnly;" + '\r\n\r\n').encode('utf-8'), keep_alive
