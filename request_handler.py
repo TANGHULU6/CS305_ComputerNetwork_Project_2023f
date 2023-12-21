@@ -30,9 +30,15 @@ def handle_request(request):
     method, path, _ = request_line.split(' ')
 
     is_authed, currentUser = is_authorized(headers)
+
+    if method == "HEAD" and path == '/':
+        if not is_authed:
+            return generate_head_401_response(keep_alive), keep_alive
+        return generate_head_200_response(keep_alive), keep_alive
+
     # 检查授权
     if not is_authed:
-        return generate_unauthorized_response(keep_alive), keep_alive
+        return generate_401_response(keep_alive), keep_alive
 
     if method == 'GET' and not path.startswith('/upload?'):
 
@@ -221,20 +227,6 @@ def is_authorized(headers):
         return False, None
 
 
-def generate_unauthorized_response(keep_alive):
-    l = len("Unauthorized Access!")
-    response_headers = [
-        "HTTP/1.1 401 Unauthorized",
-        "Content-Type: text/plain",
-        "WWW-Authenticate: Basic realm=\"Authorization Required\"",
-        f"Content-Length: {l}"
-    ]
-    if keep_alive:
-        response_headers.append("Connection: keep-alive")
-    response_body = "Unauthorized Access!"
-    return ("\r\n".join(response_headers) + "\r\n\r\n" + response_body).encode('utf-8')
-
-
 def generate_file_list_response(keep_alive):
     files = os.listdir('./data')
     response_body = "\\n".join(files)
@@ -266,6 +258,20 @@ def generate_file_download_response(path, keep_alive):
     if keep_alive:
         response_headers.append("Connection: keep-alive")
     return ("\r\n".join(response_headers) + "\r\n\r\n").encode('utf-8') +response_body
+
+
+def generate_401_response(keep_alive):
+    l = len("Unauthorized Access!")
+    response_headers = [
+        "HTTP/1.1 401 Unauthorized",
+        "Content-Type: text/plain",
+        "WWW-Authenticate: Basic realm=\"Authorization Required\"",
+        f"Content-Length: {l}"
+    ]
+    if keep_alive:
+        response_headers.append("Connection: keep-alive")
+    response_body = "Unauthorized Access!"
+    return ("\r\n".join(response_headers) + "\r\n\r\n" + response_body).encode('utf-8')
 
 
 def generate_400_response(keep_alive):
@@ -336,3 +342,25 @@ def generate_500_response(keep_alive):
         response_headers.append("Connection: keep-alive")
     response_body = "Delete file failed."
     return ("\r\n".join(response_headers) + "\r\n\r\n" + response_body).encode('utf-8')
+
+
+def generate_head_401_response(keep_alive):
+    response_headers = [
+        "HTTP/1.1 401 Unauthorized",
+        "Content-Type: text/plain",
+        "Content-Length: 0"
+    ]
+    if keep_alive:
+        response_headers.append("Connection: keep-alive")
+    return ("\r\n".join(response_headers) + "\r\n\r\n").encode('utf-8')
+
+
+def generate_head_200_response(keep_alive):
+    response_headers = [
+        "HTTP/1.1 200 OK",
+        "Content-Type: text/plain",
+        f"Content-Length: 0"
+    ]
+    if keep_alive:
+        response_headers.append("Connection: keep-alive")
+    return ("\r\n".join(response_headers) + "\r\n\r\n").encode('utf-8')
