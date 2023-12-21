@@ -8,7 +8,7 @@ import time
 
 AUTHORIZED_USERS = {"12110518": "asdasdasd", "user2": "password2", "client1": "123"}
 SESSIONS = {}
-SESSION_TIMEOUT = 600
+SESSION_TIMEOUT = 300
 
 
 def handle_request(request):
@@ -107,14 +107,19 @@ def handle_request(request):
 
     if not is_authed:
         if method == "HEAD":
-            return (response_header + '\r\n\r\n').encode('utf-8'), keep_alive
+            return (response_header + f"\r\nSet-Cookie: session-id={session_id}; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; HttpOnly;" + '\r\n\r\n').encode('utf-8'), keep_alive
         else:
-            return (response_header + '\r\n\r\n').encode('utf-8') + response_body, keep_alive
+            return (response_header + f"\r\nSet-Cookie: session-id={session_id}; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; HttpOnly;" + '\r\n\r\n').encode('utf-8') + response_body, keep_alive
     elif currentUser and session_id:
         if method == "HEAD":
-            return (response_header + f"\r\nSet-Cookie: session-id={session_id}; Path=/; HttpOnly;" + '\r\n\r\n').encode('utf-8'), keep_alive
+            return (response_header + f"\r\nSet-Cookie: session-id={session_id};  Path=/; HttpOnly;" + '\r\n\r\n').encode('utf-8'), keep_alive
         else:
             return (response_header + f"\r\nSet-Cookie: session-id={session_id}; Path=/; HttpOnly;" + '\r\n\r\n').encode('utf-8') + response_body, keep_alive
+    elif currentUser is None and session_id is None:
+        if method == "HEAD":
+            return (response_header + f"\r\nSet-Cookie: session-id={session_id}; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; HttpOnly;" + '\r\n\r\n').encode('utf-8'), keep_alive
+        else:
+            return (response_header + f"\r\nSet-Cookie: session-id={session_id}; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; HttpOnly;" + '\r\n\r\n').encode('utf-8') + response_body, keep_alive
     else:
         if method == "HEAD":
             return (response_header + '\r\n\r\n').encode('utf-8'), keep_alive
@@ -141,8 +146,8 @@ def handle_user_auth(headers):
             is_authed = True
             current_user = get_user_from_session(session_id)
             return is_authed, current_user, None
-
-
+        else:
+            return False, None, None
     is_authed, currentUser = is_authorized(headers)
     if is_authed:
         session_id = generate_session_id(currentUser)
