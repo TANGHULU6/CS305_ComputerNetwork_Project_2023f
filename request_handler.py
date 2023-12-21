@@ -12,6 +12,7 @@ def handle_request(request):
     header_end = request.find(b'\r\n\r\n') + 4  # 加4是为了包含分界标记本身
 
     header_data = request[:header_end]
+
     body_data = request[header_end:]
 
     header_text = header_data.decode('utf-8')
@@ -19,6 +20,7 @@ def handle_request(request):
     headers = parse_headers(header_text)
 
     keep_alive = True
+
     if "Connection" in headers.keys():
         keep_alive = headers.get("Connection").lower() != "close"
 
@@ -45,22 +47,59 @@ def handle_request(request):
         else:
             return generate_404_response(keep_alive), keep_alive
 
-    elif method == 'POST' and not path.startswith('/upload?'):
+    elif method == 'POST' and not path.startswith('/upload?') and not path.startswith('/delete?'):
         return generate_400_response(keep_alive), keep_alive
+
+    elif method != 'POST' and path.startswith('/upload?'):
+        return generate_405_response(keep_alive), keep_alive
 
     elif method == 'POST' and path.startswith('/upload?'):
         parsed_url = urllib.parse.urlparse(path)
         query_params = urllib.parse.parse_qs(parsed_url.query)
         if 'path' not in query_params:
-            return generate_404_response(keep_alive), keep_alive
+            return generate_400_response(keep_alive), keep_alive
 
         path = query_params['path'][0].lstrip('/')
         directory = path.strip('/').split('/')[0]  # 假设目录是路径的第一部分
-        print(directory)
+
         if directory != currentUser:
             return generate_403_response(keep_alive), keep_alive
-        return handle_post_request(request, headers, './data/' + path, keep_alive, currentUser)
 
+        if directory not in AUTHORIZED_USERS.keys():
+            return generate_404_response(keep_alive), keep_alive
+
+        return handle_post_request(request, headers, './data/' + path, keep_alive, currentUser)
+    elif method == 'POST' and path.startswith('/delete?'):
+
+        parsed_url = urllib.parse.urlparse(path)
+        query_params = urllib.parse.parse_qs(parsed_url.query)
+
+        if 'path' not in query_params:
+            return generate_400_response(keep_alive), keep_alive
+
+        path = query_params['path'][0].lstrip('/')
+        directory = path.strip('/').split('/')[0]  # 假设目录是路径的第一部分
+
+        if directory != currentUser:
+            return generate_403_response(keep_alive), keep_alive
+
+        real_path = './data/' + path
+
+        print(real_path)
+
+        if not os.path.exists(real_path):
+            return generate_404_response(keep_alive), keep_alive
+
+        return handle_delete_request(real_path, keep_alive)
+
+
+def handle_delete_request(real_path, keep_alive):
+    try:
+        os.remove(real_path)
+        return generate_200_response(keep_alive, "Remove Success!"), keep_alive
+    except Exception as e:
+        print(f'Error deleting file: {e}')
+        return generate_500_response(keep_alive), keep_alive
 
 
 def handle_post_request(request, headers, file_path, keep_alive, currentUser):
@@ -95,7 +134,7 @@ def extract_and_save_file(request, boundary, file_path, keep_alive):
             with open(os.path.join(file_path, filename), 'wb') as file:
                 file.write(file_content)
 
-            return generate_200_response(keep_alive)
+            return generate_200_response(keep_alive, 'Upload success!')
 
     return generate_400_response(keep_alive)
 
@@ -276,8 +315,7 @@ def generate_404_response(keep_alive):
     return ("\r\n".join(response_headers) + "\r\n\r\n" + response_body).encode('utf-8')
 
 
-def generate_200_response(keep_alive):
-    response_body = "Upload success!"
+def generate_200_response(keep_alive, response_body):
     response_headers = [
         "HTTP/1.1 200 OK",
         "Content-Type: text/plain",
@@ -285,4 +323,16 @@ def generate_200_response(keep_alive):
     ]
     if keep_alive:
         response_headers.append("Connection: keep-alive")
+    return ("\r\n".join(response_headers) + "\r\n\r\n" + response_body).encode('utf-8')
+
+
+def generate_500_response(keep_alive):
+    response_headers = [
+        "HTTP/1.1 500 System Error",
+        "Content-Type: text/plain",
+        "Content-Length: 19"
+    ]
+    if keep_alive:
+        response_headers.append("Connection: keep-alive")
+    response_body = "Delete file failed."
     return ("\r\n".join(response_headers) + "\r\n\r\n" + response_body).encode('utf-8')
