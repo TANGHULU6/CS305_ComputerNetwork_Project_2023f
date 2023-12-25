@@ -61,7 +61,7 @@ def handle_request(request, client_socket):
         if os.path.isdir(file_path):
             response_header, response_body = handle_directory_request(file_path, query_params, keep_alive, currentUser)
         elif os.path.isfile(file_path):
-            response_header, response_body = generate_file_download_response_basic(file_path, keep_alive, query_params,
+            response_header, response_body = generate_file_download_response(file_path, keep_alive, headers, query_params,
                                                                                    client_socket)
         else:
             response_header, response_body = generate_404_response(keep_alive)
@@ -389,44 +389,58 @@ def generate_file_download_response_basic(path, keep_alive, query_params, client
         return None, None
 
 
-def generate_file_download_response(path, keep_alive, query_params, client_socket):
+import uuid
+
+
+def generate_file_download_response(path, keep_alive, headers, query_params, client_socket):
     if not os.path.exists(path):
         return generate_400_response(keep_alive)
 
-    range_header = query_params.get("range")
+    range_header = headers.get("Range")
     if range_header:
-        start, end = parse_range_header(range_header, path)
-        if start is not None and end is not None:
-            with open(path, 'rb') as file:
-                file.seek(start)
-                response_body = file.read(end - start + 1)
-            mime_type, _ = mimetypes.guess_type(path)
+        ranges = parse_range_header(range_header, path)
+        if ranges:
+            boundary = str(uuid.uuid4())
             response_headers = [
                 "HTTP/1.1 206 Partial Content",
-                "Content-Type: " + (mime_type or "application/octet-stream"),
-                "Content-Length: " + str(len(response_body)),
-                "Content-Range: bytes {}-{}/{}".format(start, end, os.path.getsize(path))
+                "Content-Type: multipart/byteranges; boundary={}".format(boundary)
             ]
             if keep_alive:
                 response_headers.append("Connection: keep-alive")
+            response_body = b""
+
+            for start, end in ranges:
+                with open(path, 'rb') as file:
+                    file.seek(start)
+                    part_content = file.read(end - start + 1)
+                mime_type, _ = mimetypes.guess_type(path)
+                response_body += bytes("--{}\r\n".format(boundary), 'utf-8')
+                response_body += bytes("Content-Type: {}\r\n".format(mime_type or "application/octet-stream"), 'utf-8')
+                response_body += bytes(
+                    "Content-Range: bytes {}-{}/{}\r\n\r\n".format(start, end, os.path.getsize(path)), 'utf-8')
+                response_body += part_content
+                response_body += b"\r\n"
+
+            response_body += bytes("--{}--\r\n".format(boundary), 'utf-8')
+            response_headers.append("Content-Length: " + str(len(response_body)))
+
             return "\r\n".join(response_headers), response_body
         else:
             return generate_416_response(keep_alive)
 
-    # 其他现有的文件处理逻辑
     else:
-        generate_file_download_response_basic(path, keep_alive, query_params, client_socket)
-
+        return generate_file_download_response_basic(path, keep_alive, query_params, client_socket)
 
 def parse_range_header(range_header, file_path):
-    try:
-        size = os.path.getsize(file_path)
-        parts = range_header.split("=")[1].split("-")
-        start = int(parts[0]) if parts[0] else 0
-        end = int(parts[1]) if parts[1] else size - 1
-        return max(0, start), min(end, size - 1)
-    except:
-        return None, None
+    size = os.path.getsize(file_path)
+    ranges = []
+    for part in range_header.replace("bytes=", "").split(","):
+        start_end = part.split("-")
+        start = int(start_end[0]) if start_end[0] else 0
+        end = int(start_end[1]) if start_end[1] else size - 1
+        if start <= end:
+            ranges.append((start, min(end, size - 1)))
+    return ranges if ranges else None
 
 
 def generate_416_response(keep_alive):
@@ -523,7 +537,6 @@ def generate_500_response(keep_alive):
         response_headers.append("Connection: keep-alive")
     response_body = "Delete file failed."
     return "\r\n".join(response_headers), response_body.encode('utf-8')
-
 
 
 def generate_head_200_response(keep_alive):
