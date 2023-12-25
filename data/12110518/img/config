@@ -1,0 +1,57 @@
+{
+  "kaihei_app_config": {
+    "sendMessageKeyMode": "0",
+    "video_volume": 0.5,
+    "developerMode": false,
+    "screenshot_shortcut": [],
+    "screenshot_full_shortcut": [
+      120
+    ],
+    "screenshot_save_path": "",
+    "golive_change_room_hide_tips": false,
+    "golive_invite_clicked": false,
+    "golive_frame_rate": 30,
+    "golive_resolution": 720,
+    "golive_start_btn_clicked": false,
+    "show_console_log": false,
+    "push_audio_recording": false,
+    "pull_audio_recording": false,
+    "show_golive_info": false,
+    "atmosphereSoundVolume": 20,
+    "atmosphere_sound_shortcut_map": "{}"
+  },
+  "AUDIO_CONFIG_KEY": {
+    "beepVolume": 5,
+    "selectedMicrophoneId": -2,
+    "selectedHeadphoneId": -2,
+    "inputVolume": 147,
+    "outputVolume": 100,
+    "inputMode": "talk",
+    "keypressDelay": 0,
+    "openInputKey": [
+      113
+    ],
+    "closeInputKey": [],
+    "quickMuteKey": [],
+    "autoSens": true,
+    "sensitivity": -90,
+    "echoCancellation": true,
+    "noiseCancellation": true,
+    "soundGain": true,
+    "isInputMuted": false,
+    "isMuted": false,
+    "usersVolume": {},
+    "usersMuteVolume": {},
+    "overlay": true,
+    "autoSelectDeviceShow": true,
+    "lastConnectAudioInfo": {},
+    "accompanimentVolume": 100,
+    "aiNoiseSuppression": true,
+    "_updatedAiNoiseSuppression": false,
+    "fixedGain": false,
+    "goliveOverlay": true,
+    "golivePreviewSize": "small",
+    "goliveGpuEncoding": true,
+    "goliveWgcBorder": true
+  }
+}
