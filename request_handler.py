@@ -12,7 +12,6 @@ SESSION_TIMEOUT = 300
 
 
 def handle_request(request, client_socket):
-
     header_end = request.find(b'\r\n\r\n') + 4  # 加4是为了包含分界标记本身
 
     header_data = request[:header_end]
@@ -60,17 +59,18 @@ def handle_request(request, client_socket):
             chunked = True
 
         if os.path.isdir(file_path):
-            response_header, response_body =  handle_directory_request(file_path, query_params, keep_alive, currentUser)
+            response_header, response_body = handle_directory_request(file_path, query_params, keep_alive, currentUser)
         elif os.path.isfile(file_path):
-            response_header, response_body =  generate_file_download_response(file_path, keep_alive, query_params, client_socket)
+            response_header, response_body = generate_file_download_response_basic(file_path, keep_alive, query_params,
+                                                                                   client_socket)
         else:
-            response_header, response_body =  generate_404_response(keep_alive)
+            response_header, response_body = generate_404_response(keep_alive)
 
     # elif method == 'POST' and not path.startswith('/upload?') and not path.startswith('/delete?'):
     #     response_header, response_body =  generate_400_response(keep_alive)
 
     elif method != 'POST' and path.startswith('/upload?'):
-        response_header, response_body =  generate_405_response(keep_alive)
+        response_header, response_body = generate_405_response(keep_alive)
 
     elif method == 'POST' and path.startswith('/upload?'):
         parsed_url = urllib.parse.urlparse(path)
@@ -88,7 +88,8 @@ def handle_request(request, client_socket):
                 response_header, response_body = generate_404_response(keep_alive)
 
             else:
-                response_header, response_body = handle_post_request(request, headers, './data/' + path, keep_alive, currentUser)
+                response_header, response_body = handle_post_request(request, headers, './data/' + path, keep_alive,
+                                                                     currentUser)
 
     elif method == 'POST' and path.startswith('/delete?'):
 
@@ -96,7 +97,7 @@ def handle_request(request, client_socket):
         query_params = urllib.parse.parse_qs(parsed_url.query)
 
         if 'path' not in query_params:
-            response_header, response_body =  generate_400_response(keep_alive)
+            response_header, response_body = generate_400_response(keep_alive)
         else:
             path = query_params['path'][0].lstrip('/')
             directory = path.strip('/').split('/')[0]  # 假设目录是路径的第一部分
@@ -115,19 +116,31 @@ def handle_request(request, client_socket):
         return None, None, keep_alive
     elif not is_authed:
         if method == "HEAD":
-            return (response_header + f"\r\nSet-Cookie: session-id={session_id}; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; HttpOnly;" + '\r\n\r\n').encode('utf-8'), keep_alive
+            return (
+                        response_header + f"\r\nSet-Cookie: session-id={session_id}; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; HttpOnly;" + '\r\n\r\n').encode(
+                'utf-8'), keep_alive
         else:
-            return (response_header + f"\r\nSet-Cookie: session-id={session_id}; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; HttpOnly;" + '\r\n\r\n').encode('utf-8') + response_body, keep_alive
+            return (
+                               response_header + f"\r\nSet-Cookie: session-id={session_id}; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; HttpOnly;" + '\r\n\r\n').encode(
+                'utf-8') + response_body, keep_alive
     elif currentUser and session_id:
         if method == "HEAD":
-            return (response_header + f"\r\nSet-Cookie: session-id={session_id};  Path=/; HttpOnly;" + '\r\n\r\n').encode('utf-8'), keep_alive
+            return (
+                        response_header + f"\r\nSet-Cookie: session-id={session_id};  Path=/; HttpOnly;" + '\r\n\r\n').encode(
+                'utf-8'), keep_alive
         else:
-            return (response_header + f"\r\nSet-Cookie: session-id={session_id}; Path=/; HttpOnly;" + '\r\n\r\n').encode('utf-8') + response_body, keep_alive
+            return (
+                               response_header + f"\r\nSet-Cookie: session-id={session_id}; Path=/; HttpOnly;" + '\r\n\r\n').encode(
+                'utf-8') + response_body, keep_alive
     elif currentUser is None and session_id is None:
         if method == "HEAD":
-            return (response_header + f"\r\nSet-Cookie: session-id={session_id}; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; HttpOnly;" + '\r\n\r\n').encode('utf-8'), keep_alive
+            return (
+                        response_header + f"\r\nSet-Cookie: session-id={session_id}; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; HttpOnly;" + '\r\n\r\n').encode(
+                'utf-8'), keep_alive
         else:
-            return (response_header + f"\r\nSet-Cookie: session-id={session_id}; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; HttpOnly;" + '\r\n\r\n').encode('utf-8') + response_body, keep_alive
+            return (
+                               response_header + f"\r\nSet-Cookie: session-id={session_id}; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; HttpOnly;" + '\r\n\r\n').encode(
+                'utf-8') + response_body, keep_alive
     else:
         if method == "HEAD":
             return (response_header + '\r\n\r\n').encode('utf-8'), keep_alive
@@ -189,6 +202,7 @@ def generate_session_id(username):
     session_id = hashlib.sha256(user_bytes + current_time).hexdigest()
     SESSIONS[session_id] = {'user': username, 'expiry': time.time() + SESSION_TIMEOUT}
     return session_id
+
 
 def get_user_from_session(session_id):
     if session_id in SESSIONS:
@@ -360,7 +374,7 @@ def generate_200_cookie_response(keep_alive, session_id=None):
     return "\r\n".join(headers), content.encode('utf-8')
 
 
-def generate_file_download_response(path, keep_alive, query_params, client_socket):
+def generate_file_download_response_basic(path, keep_alive, query_params, client_socket):
     # file_path = os.path.join('./data/', urllib.parse.unquote(path[1:]))
     # print(path)
     # print(file_path)
@@ -399,11 +413,62 @@ def generate_file_download_response(path, keep_alive, query_params, client_socke
         with open(path, 'rb') as file:
             chunk = file.read(1024)  # Read in chunks of 1024 bytes
             while chunk:
-                client_socket.sendall(f"{len(chunk):X}\r\n".encode() + chunk + b"\r\n") # Chunk size in hex
+                client_socket.sendall(f"{len(chunk):X}\r\n".encode() + chunk + b"\r\n")  # Chunk size in hex
                 chunk = file.read(1024)
 
         client_socket.sendall(b"0\r\n\r\n")  # End of chunks
         return None, None
+
+
+def generate_file_download_response(path, keep_alive, query_params, client_socket):
+    if not os.path.exists(path):
+        return generate_400_response(keep_alive)
+
+    range_header = query_params.get("range")
+    if range_header:
+        start, end = parse_range_header(range_header, path)
+        if start is not None and end is not None:
+            with open(path, 'rb') as file:
+                file.seek(start)
+                response_body = file.read(end - start + 1)
+            mime_type, _ = mimetypes.guess_type(path)
+            response_headers = [
+                "HTTP/1.1 206 Partial Content",
+                "Content-Type: " + (mime_type or "application/octet-stream"),
+                "Content-Length: " + str(len(response_body)),
+                "Content-Range: bytes {}-{}/{}".format(start, end, os.path.getsize(path))
+            ]
+            if keep_alive:
+                response_headers.append("Connection: keep-alive")
+            return "\r\n".join(response_headers), response_body
+        else:
+            return generate_416_response(keep_alive)
+
+    # 其他现有的文件处理逻辑
+    else:
+        generate_file_download_response_basic(path, keep_alive, query_params, client_socket)
+
+
+def parse_range_header(range_header, file_path):
+    try:
+        size = os.path.getsize(file_path)
+        parts = range_header.split("=")[1].split("-")
+        start = int(parts[0]) if parts[0] else 0
+        end = int(parts[1]) if parts[1] else size - 1
+        return max(0, start), min(end, size - 1)
+    except:
+        return None, None
+
+
+def generate_416_response(keep_alive):
+    response_headers = [
+        "HTTP/1.1 416 Range Not Satisfiable",
+        "Content-Type: text/plain",
+        "Content-Length: 0"
+    ]
+    if keep_alive:
+        response_headers.append("Connection: keep-alive")
+    return "\r\n".join(response_headers), b''
 
 
 def generate_401_response(keep_alive):
@@ -430,6 +495,7 @@ def generate_400_response(keep_alive):
         response_headers.append("Connection: keep-alive")
     response_body = "File not found"
     return "\r\n".join(response_headers), response_body.encode('utf-8')
+
 
 def generate_403_response(keep_alive):
     response_headers = [
