@@ -113,7 +113,7 @@ def handle_request(request, client_socket):
         response_header, response_body = generate_405_response(keep_alive)
 
     if chunked:
-        return None, None, keep_alive
+        return None, keep_alive
     elif not is_authed:
         if method == "HEAD":
             return (
@@ -343,37 +343,6 @@ def is_authorized(headers):
         return False, None
 
 
-def generate_file_list_response(keep_alive):
-    files = os.listdir('./data')
-    response_body = "\\n".join(files)
-    response_headers = [
-        "HTTP/1.1 200 OK",
-        "Content-Type: text/plain",
-        "Content-Length: " + str(len(response_body))
-    ]
-    if keep_alive:
-        response_headers.append("Connection: keep-alive")
-    return "\r\n".join(response_headers), response_body.encode('utf-8')
-
-
-def generate_head_200_cookie_response(keep_alive, session_id=None):
-    headers = "HTTP/1.1 200 OK\r\n"
-    if session_id:
-        headers += f"Set-Cookie: session-id={session_id}; HttpOnly\r\n"
-    # ... rest of the header and response generation ...
-    return "\r\n".join(headers)
-
-
-def generate_200_cookie_response(keep_alive, session_id=None):
-    headers = "HTTP/1.1 200 OK\r\n"
-    content = 'Cookie is set.'
-    if session_id:
-        headers += f"Set-Cookie: session-id={session_id}; HttpOnly\r\n"
-        headers += f"Content-Length: {len(content)}"
-    # ... rest of the header and response generation ...
-    return "\r\n".join(headers), content.encode('utf-8')
-
-
 def generate_file_download_response_basic(path, keep_alive, query_params, client_socket):
     # file_path = os.path.join('./data/', urllib.parse.unquote(path[1:]))
     # print(path)
@@ -555,16 +524,6 @@ def generate_500_response(keep_alive):
     response_body = "Delete file failed."
     return "\r\n".join(response_headers), response_body.encode('utf-8')
 
-
-def generate_head_401_response(keep_alive):
-    response_headers = [
-        "HTTP/1.1 401 Unauthorized",
-        "Content-Type: text/plain",
-        "Content-Length: 0"
-    ]
-    if keep_alive:
-        response_headers.append("Connection: keep-alive")
-    return "\r\n".join(response_headers), None
 
 
 def generate_head_200_response(keep_alive):

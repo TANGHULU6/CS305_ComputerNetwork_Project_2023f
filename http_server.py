@@ -51,7 +51,7 @@ class HttpServer:
                     if content_length is not None and len(content) >= content_length:
                         break
 
-                    if content_length is None:
+                    if b'\r\n\r\n' in request and content_length is None:
                         break
 
                 if not request:
