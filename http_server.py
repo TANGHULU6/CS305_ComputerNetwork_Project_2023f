@@ -51,14 +51,15 @@ class HttpServer:
                     if content_length is not None and len(content) >= content_length:
                         break
 
-                    if content_length is None:
+                    if b'\r\n\r\n' in request and content_length is None:
                         break
 
                 if not request:
                     continue
-                response, keep_alive = handle_request(request)
+                response, keep_alive = handle_request(request, client_socket)
                 print(f'|SEND| \n {response}')
-                client_socket.sendall(response)
+                if response and keep_alive:
+                    client_socket.sendall(response)
             # client_socket.close()
 
 
