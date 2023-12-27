@@ -6,7 +6,7 @@ import os
 import urllib.parse
 import time
 
-AUTHORIZED_USERS = {"12110518": "asdasdasd", "user2": "password2", "client1": "123"}
+AUTHORIZED_USERS = {"12110518": "asdasdasd", "user2": "password2", "client1": "123", "client2": "123", "client3": "123"}
 SESSIONS = {}
 SESSION_TIMEOUT = 300
 
@@ -219,11 +219,10 @@ def get_user_from_session(session_id):
 def handle_delete_request(real_path, keep_alive):
     try:
         os.remove(real_path)
-        return generate_200_response(keep_alive, "Remove Success!"), keep_alive
+        return generate_200_response(keep_alive, "Remove Success!")
     except Exception as e:
         print(f'Error deleting file: {e}')
-        return generate_500_response(keep_alive), keep_alive
-
+        return generate_500_response(keep_alive)
 
 def handle_post_request(request, headers, file_path, keep_alive, currentUser):
     if not 'Content-Type' in headers.keys():
