@@ -5,13 +5,18 @@ import mimetypes
 import os
 import urllib.parse
 import time
+import AES
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives import hashes
 
 AUTHORIZED_USERS = {"12110518": "asdasdasd", "user2": "password2", "client1": "123", "client2": "123", "client3": "123"}
 SESSIONS = {}
 SESSION_TIMEOUT = 300
-
+encrypt_key = None
 
 def handle_request(request, client_socket):
+    global encrypt_key
     header_end = request.find(b'\r\n\r\n') + 4  # 加4是为了包含分界标记本身
 
     header_data = request[:header_end]
@@ -26,8 +31,13 @@ def handle_request(request, client_socket):
 
     chunked = False
 
+    encrypt = False
+
     if "Connection" in headers.keys():
         keep_alive = headers.get("Connection").lower() != "close"
+
+    if "X-Content-Encrypted" in headers.keys():
+        encrypt = (headers.get("X-Content-Encrypted").lower() == "true")
 
     # Add your request handling logic here
     request_line = header_text.split("\r\n")[0].split('\n')[0]
@@ -39,8 +49,21 @@ def handle_request(request, client_socket):
     response_header = str()
     response_body = bytes()
 
+    if encrypt and not path.startswith('/upload?') and len(body_data) != 0:
+        body_data = AES.aes_decrypt(encrypt_key, body_data)
+
+    # 获取非对称加密公钥
+    if method == 'GET' and path == '/getPublicKey':
+        response_header, response_body = handle_get_public_key(keep_alive)
+
+    # 客户端发送加密后的对称密钥
+    elif method == 'POST' and path == '/sendEncryptKey':
+        encrypt_key = handle_send_encrypt_key(body_data)
+        response_header, response_body = handle_send_encrypt_key_response(keep_alive)
+        print(f"|Encrypt Key| \n {encrypt_key}")
+
     # 检查授权
-    if not is_authed:
+    elif not is_authed:
         response_header, response_body = generate_401_response(keep_alive)
 
     elif method == "HEAD" and path == '/':
@@ -112,6 +135,14 @@ def handle_request(request, client_socket):
                 response_header, response_body = handle_delete_request(real_path, keep_alive)
     else:
         response_header, response_body = generate_405_response(keep_alive)
+
+    # 如果是加密通信
+    if encrypt:
+        response_body = AES.aes_encrypt(encrypt_key, response_body)
+        response_header = response_header.split("\r\n")
+        response_header = [header for header in response_header if not header.startswith("Content-Length")]
+        response_header.append(f"Content-Length: {len(response_body)}")
+        response_header = "\r\n".join(response_header)
 
     if chunked:
         return None, keep_alive
@@ -249,6 +280,9 @@ def extract_and_save_file(request, boundary, file_path, keep_alive):
             # Extract filename
             filename = part.split(b'filename="')[1].split(b'"')[0].decode('utf-8')
             file_content = part.split(b'\r\n\r\n')[1].rstrip(b'\r\n')
+
+            if encrypt_key:
+                file_content = AES.aes_decrypt(encrypt_key, file_content)
 
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
@@ -580,3 +614,34 @@ def generate_head_200_response(keep_alive):
     if keep_alive:
         response_headers.append("Connection: keep-alive")
     return "\r\n".join(response_headers), None
+
+def handle_get_public_key(keep_alive):
+    with open('public_key.pem', 'rb') as pub_key_file:
+        public_key = pub_key_file.read()
+    return generate_200_response(keep_alive, public_key.__str__())
+
+def handle_send_encrypt_key(body_data):
+    # 使用之前的 decrypt_with_private_key 函数解密接收到的对称密钥
+    return decrypt_with_private_key(body_data)
+
+def handle_send_encrypt_key_response(keep_alive):
+    # 使用之前的 decrypt_with_private_key 函数解密接收到的对称密钥
+    return generate_200_response(keep_alive, "Send Success!")
+
+def decrypt_with_private_key(encrypted_data):
+    with open('private_key.pem', 'rb') as key_file:
+        private_key = serialization.load_pem_private_key(
+            key_file.read(),
+            password=None
+        )
+
+    decrypted_data = private_key.decrypt(
+        encrypted_data,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+
+    return decrypted_data

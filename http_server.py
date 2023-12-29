@@ -1,16 +1,45 @@
 # http_server.py
-
+import os
 import socket
 import threading
 from request_handler import handle_request
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
 
 class HttpServer:
     def __init__(self, host, port):
         self.host = host
         self.port = port
 
+    @staticmethod
+    def generate_rsa_keys():
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        public_key = private_key.public_key()
+
+        # 序列化私钥
+        private_pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption()
+        )
+
+        # 序列化公钥
+        public_pem = public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+
+        return private_pem, public_pem
+
     def run(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+            if not os.path.exists("private_key.pem") or not os.path.exists("public_key.pem"):
+                private_key, public_key = self.generate_rsa_keys()
+                with open('private_key.pem', 'wb') as p_key_file:
+                    p_key_file.write(private_key)
+                with open('public_key.pem', 'wb') as pub_key_file:
+                    pub_key_file.write(public_key)
+
             server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             server_socket.bind((self.host, self.port))
             server_socket.listen(5)
@@ -61,5 +90,3 @@ class HttpServer:
                 if response and keep_alive:
                     client_socket.sendall(response)
             # client_socket.close()
-
-
