@@ -340,7 +340,9 @@ def generate_html_directory_response(path, base_url, keep_alive, currentUser):
     for item in os.listdir(path):
         item_path = os.path.join(path, item)
 
-        html_content += f'<li><a href="{item_path[6:]}">{item}</a></li>'
+        item_path_2 = item_path[6:].replace("\\", "/")
+
+        html_content += f'<li><a href="{item_path[6:]}">{item}</a><form method="post" action="/delete?path={item_path_2}"><button type="submit">delete</button></form></li>'
 
     html_content += "</ul>"
     html_content += f"<form id=\"uploadForm\" method=\"post\" enctype=\"multipart/form-data\"><label for=\"url-input\">Upload location:</label><input type=\"text\" id=\"url-input\" placeholder=\"/\"><label for=\"file-upload\">Choose file:</label><input type=\"file\" id=\"file-upload\" name=\"file\"><input type=\"submit\" value=\"Upload File\"></form><script>    document.getElementById('uploadForm').onsubmit = function(event)" + " {var actionUrl = document.getElementById('url-input').value; this.action = \'http://localhost:8080/upload?path=/" + f'{currentUser}' + "/\' + actionUrl; };</script></body></html>"
